@@ -107,12 +107,14 @@ class CNNModel(LanguageModel):
   def add_placeholders(self):
     self.input_placeholder = tf.placeholder(tf.int32, shape=(self.config.batch_size, self.max_document_length))
     self.labels_placeholder = tf.placeholder(tf.int32, shape=(self.config.batch_size, 8))
+    self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
     self.real_len = tf.placeholder(tf.int32, [None], name='real_len')
 
-  def create_feed_dict(self, input_batch, label_batch, batch_real_len):
+  def create_feed_dict(self, input_batch, label_batch, dropout_keep_prob, batch_real_len):
     feed_dict = {
         self.input_placeholder: input_batch,
         self.labels_placeholder: label_batch,
+        self.dropout_keep_prob: dropout_keep_prob,
         self.real_len:batch_real_len}
     return feed_dict
 
@@ -124,6 +126,10 @@ class CNNModel(LanguageModel):
         embedding = tf.Variable(W, name='W')
         del W
         inputs = tf.nn.embedding_lookup(embedding, self.input_placeholder)
+        # The result of the embedding operation is a 3-dimensional tensor of shape [None, sequence_length, embedding_size].
+        inputs = tf.expand_dims(inputs, -1)
+        # TensorFlow’s convolutional conv2d operation expects a 4-dimensional tensor with dimensions corresponding to batch, width, height and channel. The result of our embedding doesn’t contain the channel dimension, 
+        # so we add it manually, leaving us with a layer of shape [None, sequence_length, embedding_size, 1].
 
     if is_training and self.config.keep_prob < 1:
       inputs = tf.nn.dropout(inputs, self.config.keep_prob)
@@ -131,40 +137,54 @@ class CNNModel(LanguageModel):
     return inputs
 
   def add_model(self, inputs, is_training):
-      lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(50)
-      if is_training and self.config.keep_prob < 1:lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=self.config.keep_prob)
-      cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * 2)
-      self.initial_state = cell.zero_state(self.config.batch_size,dtype=tf.float32)
-      state = self.initial_state
-      # shape: (batch_size, seq_length, cell.input_size) => (seq_length, batch_size, cell.input_size)
-      inputs = tf.split(1, self.max_document_length, inputs)
-      self.inputs = inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
-      outputs, state = tf.nn.rnn(cell, inputs, initial_state=state, sequence_length=self.real_len)
+      filter_sizes = [3,4,5]
+      num_filters = 128
+      pooled_outputs = []
+      for i, filter_size in enumerate(filter_sizes):
+          with tf.name_scope("conv-maxpool-%s" % filter_size):
+              # Convolution Layer
+              filter_shape = [filter_size, 50, 1, num_filters]
+              W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+              b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
+              conv = tf.nn.conv2d(
+                inputs,
+                W,
+                strides=[1, 1, 1, 1],
+                padding="VALID",
+                name="conv")
+              # Apply nonlinearity
+              h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+              # Max-pooling over the outputs
+              pooled = tf.nn.max_pool(
+                h,
+                ksize=[1, self.max_document_length - filter_size + 1, 1, 1],
+                strides=[1, 1, 1, 1],
+                padding='VALID',
+                name="pool")
+              pooled_outputs.append(pooled)
+         
+      # Combine all the pooled features
+      num_filters_total = num_filters * len(filter_sizes)
+      self.h_pool = tf.concat(3, pooled_outputs)
+      self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])
       
+      # Add dropout
+      with tf.name_scope("dropout"):
+          self.h_drop = tf.nn.dropout(self.h_pool_flat, self.dropout_keep_prob)
+    
       l2_loss = tf.constant(0.0)
-      output = outputs[0]
-      with tf.variable_scope('Output'):
-		tf.get_variable_scope().reuse_variables()
-		one = tf.ones([1, 50], tf.float32)
-		for i in range(1,len(outputs)):
-			ind = self.real_len < (i+1)
-			ind = tf.to_float(ind)
-			ind = tf.expand_dims(ind, -1)
-			mat = tf.matmul(ind, one)
-			self.output = output = tf.add(tf.mul(output, mat),tf.mul(outputs[i], 1.0 - mat))#batch_size * hidden_unit
-			#only leave the last one
-      with tf.name_scope('output'):
-		self.W = tf.Variable(tf.truncated_normal([50, 8], stddev=0.1), name='W')
-		self.b = tf.Variable(tf.constant(0.1, shape=[8]), name='b')
-		l2_loss += tf.nn.l2_loss(self.W)
-		l2_loss += tf.nn.l2_loss(self.b)
-		self.l2_loss = l2_loss
-		self.scores = tf.nn.xw_plus_b(output, self.W, self.b, name='scores')
-		self.predictions = tf.argmax(self.scores, 1, name='predictions')
+      with tf.name_scope("output"):
+            self.W = tf.Variable(tf.truncated_normal([num_filters_total, 8], stddev=0.1), name="W")
+            self.b = tf.Variable(tf.constant(0.1, shape=[8]), name="b")
+            l2_loss += tf.nn.l2_loss(self.W)
+            l2_loss += tf.nn.l2_loss(self.b)
+            self.l2_loss = l2_loss
+            self.scores = tf.nn.xw_plus_b(self.h_drop, self.W, self.b, name="scores")
+            self.predictions = tf.argmax(self.scores, 1, name="predictions")
 
       with tf.name_scope('loss'):
 		losses = tf.nn.softmax_cross_entropy_with_logits(self.scores, self.labels_placeholder) 
-		self.loss = tf.reduce_mean(losses) + 0.3 * l2_loss
+		self.loss = tf.reduce_mean(losses) + 0 * l2_loss
 
       with tf.name_scope('accuracy'):
 		correct_predictions = tf.equal(self.predictions, tf.argmax(self.labels_placeholder, 1))
@@ -180,12 +200,16 @@ class CNNModel(LanguageModel):
     return None
 
   def add_training_op(self):
-      
+    global_step = tf.Variable(0, name="global_step", trainable=False)
+    optimizer = tf.train.AdamOptimizer(1e-4)
+    grads_and_vars = optimizer.compute_gradients(self.loss)
+    train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step) 
+    '''
     global_step = tf.Variable(0, name='global_step', trainable=False)
     optimizer = tf.train.RMSPropOptimizer(1e-3, decay=0.9)
     grads_and_vars = optimizer.compute_gradients(self.loss)
     train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
-
+    '''
     return train_op
     
   def run_epoch(self, session, eval_op, verbose=False):
@@ -199,8 +223,8 @@ class CNNModel(LanguageModel):
     accuracyList = []
     for batch in batches:
         x, y = zip(*batch)
-        fetches = [self.b,self.inputs,self.loss,self.l2_loss, self.accuracy,self.predictions, self.scores,self.output,eval_op]
-        feed_dict = self.create_feed_dict(x,y,real_len(x))
+        fetches = [self.b,self.inputs,self.loss,self.l2_loss, self.accuracy,self.predictions, self.scores,self.h_drop,eval_op]
+        feed_dict = self.create_feed_dict(x,y,0.5,real_len(x))
         softmax_b,inputs,cost,l2_cost, accuracy,predictions, scores,out,_ = session.run(fetches, feed_dict)
         accuracyList.append(accuracy)
         costs += cost
@@ -221,8 +245,8 @@ class CNNModel(LanguageModel):
             for batch_dev in batches_dev:
                 x_dev, y_dev = zip(*batch_dev)
                 print(x_dev[0])
-                fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
-                feed_dict = self.create_feed_dict(x_dev,y_dev,real_len(x_dev))
+                fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+                feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
                 softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
                 accuracyList_dev.append(accuracy_dev)
                 costs_dev += cost_dev
