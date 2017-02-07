@@ -207,7 +207,8 @@ class CNNModel(LanguageModel):
     train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step) 
     return train_op
     
-  def run_epoch(self, session, eval_op, saver,checkpoint_prefix, verbose=False):
+  #def run_epoch(self, session, eval_op, saver,checkpoint_prefix, verbose=False):
+  def run_epoch(self, session, eval_op, saver,model_path, verbose=False):
     batches = batch_iter(list(zip(self.x_train, self.y_train)), self.config.batch_size, 200)
     # batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 200)
     costs = 0.0
@@ -251,12 +252,18 @@ class CNNModel(LanguageModel):
             print("Test accuracy="+str(np.mean(accuracyList_dev)))
             print("-----------------------------------------------")
         if step % 300 == 0:
+            save_path = saver.save(session, model_path)
+            print("Model saved in file: %s" % save_path)
+            '''
             path = saver.save(session, checkpoint_prefix, global_step=step)
             print("Saved model checkpoint to {}\n".format(path))
-
+            '''
+  '''
   def fit(self, sess,saver,checkpoint_prefix):
     self.run_epoch(sess, self.train_op, saver,checkpoint_prefix,True)
-
+  '''
+  def fit(self, sess,saver,model_path):
+    self.run_epoch(sess, self.train_op, saver,model_path,True)
   def __init__(self, config, sess):
     self.config = config
     self.load_data()
@@ -266,30 +273,49 @@ class CNNModel(LanguageModel):
     #self.cost = self.add_loss_op()
     self.train_op = self.add_training_op()
 
-def test_CNNModel():
+def test_CNNModel(startType='Restart'):
   """Train softmax model for a number of steps."""
   config = Config()
-  with tf.Graph().as_default():
-      sess = tf.Session()
-      initializer = tf.random_uniform_initializer(-0.1,0.1)
-      with tf.variable_scope("model", reuse=None, initializer=initializer):
-          model = CNNModel(config,sess)
-      # Output directory for models and summaries
-      timestamp = str(int(time.time()))
-      out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
-      print("Writing to {}\n".format(out_dir))
-      
-      # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
-      checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
-      checkpoint_prefix = os.path.join(checkpoint_dir, "model")
-      if not os.path.exists(checkpoint_dir):
-          os.makedirs(checkpoint_dir)
-      saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
-    
-      init = tf.initialize_all_variables()
-      sess.run(init)    
-      model.fit(sess,saver,checkpoint_prefix)
-
+  if startType == 'Restart':
+      with tf.Graph().as_default():
+          sess = tf.Session()
+          initializer = tf.random_uniform_initializer(-0.1,0.1)
+          with tf.variable_scope("model", reuse=None, initializer=initializer):
+              model = CNNModel(config,sess)
+          '''
+          # Output directory for models and summaries
+          timestamp = str(int(time.time()))
+          out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
+          print("Writing to {}\n".format(out_dir))
+          
+          # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
+          checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
+          checkpoint_prefix = os.path.join(checkpoint_dir, "model")
+          if not os.path.exists(checkpoint_dir):
+              os.makedirs(checkpoint_dir)
+          saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+          
+          init = tf.initialize_all_variables()
+          sess.run(init)    
+          model.fit(sess,saver,checkpoint_prefix)
+          '''
+          model_path = "/tmp/model.ckpt"
+          saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+          init = tf.initialize_all_variables()
+          sess.run(init)    
+          model.fit(sess,saver,model_path)
+  else:
+      with tf.Graph().as_default():
+          sess = tf.Session()
+          initializer = tf.random_uniform_initializer(-0.1,0.1)
+          with tf.variable_scope("model", reuse=None, initializer=initializer):
+              model = CNNModel(config,sess)
+          model_path = "/tmp/model.ckpt"
+          saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+          #init = tf.initialize_all_variables()
+          #sess.run(init)
+          saver.restore(sess, model_path)
+          model.fit(sess,saver,model_path)
 
 if __name__ == "__main__":
-    test_CNNModel()
+    test_CNNModel('start')
