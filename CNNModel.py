@@ -95,7 +95,7 @@ class CNNModel(LanguageModel):
     y_shuffled = self.y[shuffle_indices]
     del self.x, self.y, shuffle_indices
     
-    dev_sample_index = -1 * int(0.2 * float(len(y_shuffled)))
+    dev_sample_index = -1 * int(0.1 * float(len(y_shuffled)))
     self.x_train, self.x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
     self.y_train, self.y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
     del x_shuffled, y_shuffled
@@ -202,20 +202,14 @@ class CNNModel(LanguageModel):
   def add_training_op(self):
     global_step = tf.Variable(0, name="global_step", trainable=False)
     optimizer = tf.train.AdamOptimizer(1e-4)
+    # optimizer = tf.train.RMSPropOptimizer(1e-3, decay=0.9)
     grads_and_vars = optimizer.compute_gradients(self.loss)
     train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step) 
-    '''
-    global_step = tf.Variable(0, name='global_step', trainable=False)
-    optimizer = tf.train.RMSPropOptimizer(1e-3, decay=0.9)
-    grads_and_vars = optimizer.compute_gradients(self.loss)
-    train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
-    '''
     return train_op
     
   def run_epoch(self, session, eval_op, verbose=False):
     batches = batch_iter(list(zip(self.x_train, self.y_train)), self.config.batch_size, 200)
-    batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 200)
-    start_time = time.time()
+    # batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 200)
     costs = 0.0
     l2_costs = 0.0
     iters = 0
@@ -233,41 +227,23 @@ class CNNModel(LanguageModel):
         step = step + 1
     
         if verbose and step % 20 == 0:
-            print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
+            # print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
             print("Train accuracy="+str(np.mean(accuracyList)))
             print(predictions)
             print('cost='+str(costs))
             print('l2_cost='+str(l2_costs))
             #print(len(predictions))
-            costs_dev = 0.0
-            step_dev = 0
-            accuracyList_dev = []
-            for batch_dev in batches_dev:
-                x_dev, y_dev = zip(*batch_dev)
-                print(x_dev[0])
-                fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
-                feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
-                softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
-                accuracyList_dev.append(accuracy_dev)
-                costs_dev += cost_dev
-                step_dev = step_dev + 1
-                
-                if step_dev % 4 == 0:
-                    print("Test accuracy="+str(np.mean(accuracyList_dev)))
-                    break
-        #print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-        #print("accuracy="+str(accuracy))
-    return np.exp(costs / iters)
+        if step % 100 == 0:
+            # dev_step
+            x_dev, y_dev = self.x_dev, self.y_dev
+            # print(x_dev[0])
+            fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+            feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
+            softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
+            print("Test accuracy="+str(accuracy_dev))
 
   def fit(self, sess):
-    losses = []
-    for epoch in range(self.config.max_max_epoch):
-      average_loss = self.run_epoch(sess, self.train_op, True)
-      # Print status to stdout.
-      print('Epoch %d: loss = %.2f'
-             % (epoch, average_loss))
-      losses.append(average_loss)
-    return losses
+    self.run_epoch(sess, self.train_op, True)
 
   def __init__(self, config, sess):
     self.config = config
@@ -289,9 +265,8 @@ def test_CNNModel():
           
       init = tf.initialize_all_variables()
       sess.run(init)    
-      losses = model.fit(sess)
-      return losses
+      model.fit(sess)
 
 
 if __name__ == "__main__":
-    losses = test_CNNModel()
+    test_CNNModel()
