@@ -15,7 +15,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-
+import os
 from tensorflow.models.rnn.ptb import reader
 from model import LanguageModel
 from tensorflow.contrib import learn
@@ -207,7 +207,7 @@ class CNNModel(LanguageModel):
     train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step) 
     return train_op
     
-  def run_epoch(self, session, eval_op, verbose=False):
+  def run_epoch(self, session, eval_op, saver,checkpoint_prefix, verbose=False):
     batches = batch_iter(list(zip(self.x_train, self.y_train)), self.config.batch_size, 200)
     # batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 200)
     costs = 0.0
@@ -235,15 +235,27 @@ class CNNModel(LanguageModel):
             #print(len(predictions))
         if step % 100 == 0:
             # dev_step
-            x_dev, y_dev = self.x_dev, self.y_dev
-            # print(x_dev[0])
-            fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
-            feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
-            softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
-            print("Test accuracy="+str(accuracy_dev))
+            batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 1)
+            costs_dev = 0.0
+            # step_dev = 0
+            accuracyList_dev = []
+            for batch_dev in batches_dev:
+                x_dev, y_dev = zip(*batch_dev)
+                fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+                feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
+                softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
+                accuracyList_dev.append(accuracy_dev)
+                costs_dev += cost_dev
+                # step_dev = step_dev + 1
+            print("-----------------------------------------------")
+            print("Test accuracy="+str(np.mean(accuracyList_dev)))
+            print("-----------------------------------------------")
+        if step % 300 == 0:
+            path = saver.save(session, checkpoint_prefix, global_step=step)
+            print("Saved model checkpoint to {}\n".format(path))
 
-  def fit(self, sess):
-    self.run_epoch(sess, self.train_op, True)
+  def fit(self, sess,saver,checkpoint_prefix):
+    self.run_epoch(sess, self.train_op, saver,checkpoint_prefix,True)
 
   def __init__(self, config, sess):
     self.config = config
@@ -262,10 +274,21 @@ def test_CNNModel():
       initializer = tf.random_uniform_initializer(-0.1,0.1)
       with tf.variable_scope("model", reuse=None, initializer=initializer):
           model = CNNModel(config,sess)
-          
+      # Output directory for models and summaries
+      timestamp = str(int(time.time()))
+      out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
+      print("Writing to {}\n".format(out_dir))
+      
+      # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
+      checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
+      checkpoint_prefix = os.path.join(checkpoint_dir, "model")
+      if not os.path.exists(checkpoint_dir):
+          os.makedirs(checkpoint_dir)
+      saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+    
       init = tf.initialize_all_variables()
       sess.run(init)    
-      model.fit(sess)
+      model.fit(sess,saver,checkpoint_prefix)
 
 
 if __name__ == "__main__":
