@@ -52,6 +52,19 @@ class Config(object):
   lr_decay = 0.5
   batch_size = 64
   vocab_size = 10000
+  
+class EvaConfig(object):
+  init_scale = 0.1
+  learning_rate = 0.001
+  max_grad_norm = 5
+  num_layers = 5
+  hidden_size = 200
+  max_epoch = 4
+  max_max_epoch = 13
+  keep_prob = 1.0
+  lr_decay = 0.5
+  batch_size = 1
+  vocab_size = 10000
 
 class CNNModel(LanguageModel):
   """Implements a Softmax classifier with cross-entropy loss."""
@@ -272,6 +285,22 @@ class CNNModel(LanguageModel):
     self.add_model(inputs, True)
     #self.cost = self.add_loss_op()
     self.train_op = self.add_training_op()
+  def evaluate(self, sess):
+    batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 1)
+    costs_dev = 0.0
+    # step_dev = 0
+    accuracyList_dev = []
+    for batch_dev in batches_dev:
+        x_dev, y_dev = zip(*batch_dev)
+        fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+        feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
+        softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
+        accuracyList_dev.append(accuracy_dev)
+        costs_dev += cost_dev
+        # step_dev = step_dev + 1
+    print("-----------------------------------------------")
+    print("Evaluate accuracy="+str(np.mean(accuracyList_dev)))
+    print("-----------------------------------------------")
 
 def test_CNNModel(startType='Restart'):
   """Train softmax model for a number of steps."""
@@ -299,7 +328,7 @@ def test_CNNModel(startType='Restart'):
           sess.run(init)    
           model.fit(sess,saver,checkpoint_prefix)
           '''
-          model_path = "/tmp/model.ckpt"
+          model_path = "model.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           init = tf.initialize_all_variables()
           sess.run(init)    
@@ -310,12 +339,41 @@ def test_CNNModel(startType='Restart'):
           initializer = tf.random_uniform_initializer(-0.1,0.1)
           with tf.variable_scope("model", reuse=None, initializer=initializer):
               model = CNNModel(config,sess)
-          model_path = "/tmp/model.ckpt"
+          model_path = "CNNmodel.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           #init = tf.initialize_all_variables()
           #sess.run(init)
           saver.restore(sess, model_path)
           model.fit(sess,saver,model_path)
 
+def evaluate_CNNModel():
+    config = Config()
+    with tf.Graph().as_default():
+        sess = tf.Session()
+        initializer = tf.random_uniform_initializer(-0.1,0.1)
+        with tf.variable_scope("model", reuse=None, initializer=initializer):
+            model = CNNModel(config,sess)
+        model_path = "CNNmodel.ckpt"
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        #init = tf.initialize_all_variables()
+        #sess.run(init)
+        saver.restore(sess, model_path)
+        model.evaluate(sess)
+
+def evaluateOneByOne_CNNModel():
+    config = EvaConfig()
+    with tf.Graph().as_default():
+        sess = tf.Session()
+        initializer = tf.random_uniform_initializer(-0.1,0.1)
+        with tf.variable_scope("model", reuse=None, initializer=initializer):
+            model = CNNModel(config,sess)
+        model_path = "CNNmodel.ckpt"
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        #init = tf.initialize_all_variables()
+        #sess.run(init)
+        saver.restore(sess, model_path)
+        model.evaluate(sess)
+
 if __name__ == "__main__":
-    test_CNNModel('start')
+    #test_CNNModel('start')
+    evaluate_CNNModel()
