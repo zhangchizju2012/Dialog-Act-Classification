@@ -194,6 +194,8 @@ class CNNModel(LanguageModel):
             self.l2_loss = l2_loss
             self.scores = tf.nn.xw_plus_b(self.h_drop, self.W, self.b, name="scores")
             self.predictions = tf.argmax(self.scores, 1, name="predictions")
+            self.probablity = tf.nn.softmax(self.scores)
+            self.target = tf.argmax(self.labels_placeholder, 1)
 
       with tf.name_scope('loss'):
 		losses = tf.nn.softmax_cross_entropy_with_logits(self.scores, self.labels_placeholder) 
@@ -290,17 +292,26 @@ class CNNModel(LanguageModel):
     costs_dev = 0.0
     # step_dev = 0
     accuracyList_dev = []
+    probablityList_dev = []
+    targetList_dev = []
+    predictionList_dev = []
+    scoresList_dev = []
     for batch_dev in batches_dev:
         x_dev, y_dev = zip(*batch_dev)
-        fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+        fetches = [self.target,self.probablity,self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
         feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
-        softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
+        target_dev,probablity_dev,softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
         accuracyList_dev.append(accuracy_dev)
         costs_dev += cost_dev
         # step_dev = step_dev + 1
+        probablityList_dev.append(probablity_dev)
+        targetList_dev.append(target_dev)
+        predictionList_dev.append(predictions_dev)
+        scoresList_dev.append(scores_dev)
     print("-----------------------------------------------")
     print("Evaluate accuracy="+str(np.mean(accuracyList_dev)))
     print("-----------------------------------------------")
+    return probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev
   
   def evaluateOneByOne(self, sess):
     label = True
@@ -386,7 +397,8 @@ def evaluate_CNNModel():
         #init = tf.initialize_all_variables()
         #sess.run(init)
         saver.restore(sess, model_path)
-        model.evaluate(sess)
+        probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev = model.evaluate(sess)
+        return probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev
 
 def evaluateOneByOne_CNNModel():
     config = EvaConfig()
@@ -402,7 +414,7 @@ def evaluateOneByOne_CNNModel():
         saver.restore(sess, model_path)
         model.evaluateOneByOne(sess)
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
     #test_CNNModel('start')
-    #evaluate_CNNModel()
-    evaluateOneByOne_CNNModel()
+probablityList_dev_CNN, targetList_dev_CNN, predictionList_dev_CNN, scoresList_dev_CNN = evaluate_CNNModel()
+    #evaluateOneByOne_CNNModel()

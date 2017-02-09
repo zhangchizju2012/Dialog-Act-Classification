@@ -199,13 +199,15 @@ class RNNModel(LanguageModel):
 			self.output = output = tf.add(tf.mul(output, mat),tf.mul(outputs[i], 1.0 - mat))#batch_size * hidden_unit
 			#only leave the last one
       with tf.name_scope('output'):
-		self.W = tf.Variable(tf.truncated_normal([50, 8], stddev=0.1), name='W')
-		self.b = tf.Variable(tf.constant(0.1, shape=[8]), name='b')
-		l2_loss += tf.nn.l2_loss(self.W)
-		l2_loss += tf.nn.l2_loss(self.b)
-		self.l2_loss = l2_loss
-		self.scores = tf.nn.xw_plus_b(output, self.W, self.b, name='scores')
-		self.predictions = tf.argmax(self.scores, 1, name='predictions')
+          self.W = tf.Variable(tf.truncated_normal([50, 8], stddev=0.1), name='W')
+          self.b = tf.Variable(tf.constant(0.1, shape=[8]), name='b')
+          l2_loss += tf.nn.l2_loss(self.W)
+          l2_loss += tf.nn.l2_loss(self.b)
+          self.l2_loss = l2_loss
+          self.scores = tf.nn.xw_plus_b(output, self.W, self.b, name='scores')
+          self.predictions = tf.argmax(self.scores, 1, name='predictions')
+          self.probablity = tf.nn.softmax(self.scores)
+          self.target = tf.argmax(self.labels_placeholder, 1)
 
       with tf.name_scope('loss'):
 		losses = tf.nn.softmax_cross_entropy_with_logits(self.scores, self.labels_placeholder) 
@@ -288,7 +290,32 @@ class RNNModel(LanguageModel):
     self.add_model(inputs, True)
     #self.cost = self.add_loss_op()
     self.train_op = self.add_training_op()
-
+  def evaluate(self, sess):
+    batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 1)
+    costs_dev = 0.0
+    # step_dev = 0
+    accuracyList_dev = []
+    probablityList_dev = []
+    targetList_dev = []
+    predictionList_dev = []
+    scoresList_dev = []
+    for batch_dev in batches_dev:
+        x_dev, y_dev = zip(*batch_dev)
+        fetches = [self.target,self.probablity,self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
+        feed_dict = self.create_feed_dict(x_dev,y_dev,real_len(x_dev))
+        target_dev,probablity_dev,softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
+        accuracyList_dev.append(accuracy_dev)
+        costs_dev += cost_dev
+        # step_dev = step_dev + 1
+        probablityList_dev.append(probablity_dev)
+        targetList_dev.append(target_dev)
+        predictionList_dev.append(predictions_dev)
+        scoresList_dev.append(scores_dev)
+    print("-----------------------------------------------")
+    print("Evaluate accuracy="+str(np.mean(accuracyList_dev)))
+    print("-----------------------------------------------")
+    return probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev
+  
 def test_RNNModel(startType='Restart'):
   """Train softmax model for a number of steps."""
   config = Config()
@@ -315,6 +342,25 @@ def test_RNNModel(startType='Restart'):
           #sess.run(init)
           saver.restore(sess, model_path)
           model.fit(sess,saver,model_path)
+          
+def evaluate_RNNModel():
+    config = Config()
+    with tf.Graph().as_default():
+        sess = tf.Session()
+        initializer = tf.random_uniform_initializer(-0.1,0.1)
+        with tf.variable_scope("model", reuse=None, initializer=initializer):
+            model = RNNModel(config,sess)
+        model_path = "RNNmodel.ckpt"
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+        #init = tf.initialize_all_variables()
+        #sess.run(init)
+        saver.restore(sess, model_path)
+        probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev = model.evaluate(sess)
+        return probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev
 
+probablityList_dev_RNN, targetList_dev_RNN, predictionList_dev_RNN, scoresList_dev_RNN = evaluate_RNNModel()
+'''
 if __name__ == "__main__":
-    losses = test_RNNModel('start')
+    #losses = test_RNNModel('start')
+    evaluate_RNNModel()
+'''
