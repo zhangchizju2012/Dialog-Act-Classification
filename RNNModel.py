@@ -94,7 +94,7 @@ class RNNModel(LanguageModel):
     y_shuffled = self.y[shuffle_indices]
     del self.x, self.y, shuffle_indices
     
-    dev_sample_index = -1 * int(0.2 * float(len(y_shuffled)))
+    dev_sample_index = -1 * int(0.1 * float(len(y_shuffled)))
     self.x_train, self.x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
     self.y_train, self.y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
     del x_shuffled, y_shuffled
@@ -174,41 +174,11 @@ class RNNModel(LanguageModel):
       inputs = tf.nn.dropout(inputs, self.config.keep_prob)
     self.inputs = inputs
     return inputs
-    '''
-    with tf.device("/cpu:0"):
-        zero=np.float32((np.random.rand(1,50)-0.5)*0.2)
-        last=np.float32((np.random.rand(self.vocabularySize-400001,50)-0.5)*0.2)
-        W = np.concatenate((zero,np.loadtxt('/Users/zhangchi/Desktop/cs690/glove/embedding.txt',dtype=np.float32),last),axis=0)
-    
-        embedding = tf.Variable(tf.constant(0.0, shape=[self.vocabularySize, 50]),trainable=True, name="W")
-        
-        embedding_placeholder = tf.placeholder(tf.float32, [self.vocabularySize, 50])
-        embedding_init = embedding.assign(embedding_placeholder)
-
-        sess.run(embedding_init, feed_dict={embedding_placeholder: W})
-        del W
-        inputs = tf.nn.embedding_lookup(embedding, self.input_placeholder)
-
-    if is_training and self.config.keep_prob < 1:
-      inputs = tf.nn.dropout(inputs, self.config.keep_prob)
-    self.inputs = inputs
-    return inputs
-    '''
-    '''
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable("embedding", [self.vocabularySize, 50], dtype=tf.float32)#why hidden_size?
-      inputs = tf.nn.embedding_lookup(embedding, self.input_placeholder)
-
-    if is_training and self.config.keep_prob < 1:
-      inputs = tf.nn.dropout(inputs, self.config.keep_prob)
-    self.inputs = inputs
-    return inputs
-    '''
 
   def add_model(self, inputs, is_training):
       lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(50)
       if is_training and self.config.keep_prob < 1:lstm_cell = tf.nn.rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=self.config.keep_prob)
-      cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * 5)
+      cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * 2)
       self.initial_state = cell.zero_state(self.config.batch_size,dtype=tf.float32)
       state = self.initial_state
       # shape: (batch_size, seq_length, cell.input_size) => (seq_length, batch_size, cell.input_size)
@@ -260,19 +230,10 @@ class RNNModel(LanguageModel):
     optimizer = tf.train.RMSPropOptimizer(1e-3, decay=0.9)
     grads_and_vars = optimizer.compute_gradients(self.loss)
     train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
-    '''
-    tvars = tf.trainable_variables()
-    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars),self.config.max_grad_norm)
-    optimizer = tf.train.GradientDescentOptimizer(self.config.learning_rate)
-    train_op = optimizer.apply_gradients(zip(grads, tvars))
-    print('finish add train op')
-    '''
     return train_op
     
-  def run_epoch(self, session, eval_op, verbose=False):
+  def run_epoch(self, session, eval_op, saver,model_path, verbose=False):
     batches = batch_iter(list(zip(self.x_train, self.y_train)), self.config.batch_size, 200)
-    batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 200)
-    start_time = time.time()
     costs = 0.0
     l2_costs = 0.0
     iters = 0
@@ -290,120 +251,34 @@ class RNNModel(LanguageModel):
         step = step + 1
     
         if verbose and step % 20 == 0:
-            print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
+            # print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
             print("Train accuracy="+str(np.mean(accuracyList)))
             print(predictions)
             print('cost='+str(costs))
             print('l2_cost='+str(l2_costs))
-            #print(len(predictions))
+        if step % 100 == 0:
+            # dev_step
+            batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 1)
             costs_dev = 0.0
-            step_dev = 0
+            # step_dev = 0
             accuracyList_dev = []
             for batch_dev in batches_dev:
                 x_dev, y_dev = zip(*batch_dev)
-                print(x_dev[0])
                 fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
                 feed_dict = self.create_feed_dict(x_dev,y_dev,real_len(x_dev))
                 softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
                 accuracyList_dev.append(accuracy_dev)
                 costs_dev += cost_dev
-                step_dev = step_dev + 1
-                
-                if step_dev % 4 == 0:
-                    print("Test accuracy="+str(np.mean(accuracyList_dev)))
-                    break
-        #print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-        #print("accuracy="+str(accuracy))
-    return np.exp(costs / iters)
-    '''
-  def run_epoch(self, session, eval_op, verbose=False):
-    batches = batch_iter(list(zip(self.x_train, self.y_train)), self.config.batch_size, 200)
-    batches_dev = batch_iter(list(zip(self.x_dev, self.x_dev)), self.config.batch_size, 200)
-    start_time = time.time()
-    costs = 0.0
-    iters = 0
-    step = 0
-    accuracyList = []
-    for batch in batches:
-        x, y = zip(*batch)
-        fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output,eval_op]
-        feed_dict = self.create_feed_dict(x,y,real_len(x))
-        softmax_b,inputs,cost, accuracy,predictions, scores,out,_ = session.run(fetches, feed_dict)
-        accuracyList.append(accuracy)
-        costs += cost
-        iters += self.max_document_length
-        step = step + 1
-        #print(x)
-        #print(softmax_b)
-        #print(inputs)
-        #print(scores)
-        #print(out)
-        #print(predictions[:6])
-        #print(predictions[6:12])
-        #print(predictions[12:18])
-        #print(predictions[18:24])
-        #print(predictions[24:30])
-        #print(predictions[30:36])
-        #print('--------------')
-        #print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-        #print("accuracy="+str(accuracy))
-
-        if verbose and step % 20 == 0:
-            print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-            print("accuracy="+str(np.mean(accuracyList)))
-            print(predictions)
-            #print(len(predictions))
-        #print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-        #print("accuracy="+str(accuracy))
-    return np.exp(costs / iters)
-    '''
-    '''
-    #batches = batch_iter(list(zip(self.x_train, self.y_train)), self.config.batch_size, 200)
-    start_time = time.time()
-    costs = 0.0
-    iters = 0
-    step = 0
-    accuracyList = []
-    print(str(len(self.y_train)//self.config.batch_size))
-    for i in range(len(self.y_train)//self.config.batch_size):
-        x, y = self.x_train[i*self.config.batch_size:(i+1)*self.config.batch_size],self.y_train[i*self.config.batch_size:(i+1)*self.config.batch_size]
-        fetches = [self.cost, self.final_state, self.accuracy,self.predictions, eval_op]
-        feed_dict = self.create_feed_dict(x,y)
-        cost, state, accuracy,predictions, _ = session.run(fetches, feed_dict)
-        accuracyList.append(accuracy)
-        costs += cost
-        iters += self.max_document_length
-        step = step + 1
-        print(predictions[:6])
-        print(predictions[6:12])
-        print(predictions[12:18])
-        print(predictions[18:24])
-        print(predictions[24:30])
-        print(predictions[30:36])
-        print('--------------')
-        #print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-        #print("accuracy="+str(accuracy))
-
-        if verbose and step % 20 == 0:
-            print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-            print("accuracy="+str(np.mean(accuracyList)))
-            print(predictions)
-            #print(len(predictions))
-        #print("%.3f perplexity: %.3f speed: %.0f wps" %(step * 1.0 / 200, np.exp(costs / iters),iters * self.config.batch_size / (time.time() - start_time)))
-        #print("accuracy="+str(accuracy))
-    return np.exp(costs / iters)
-    '''
-
-
-  def fit(self, sess):
-    losses = []
-    for epoch in range(self.config.max_max_epoch):
-      average_loss = self.run_epoch(sess, self.train_op, True)
-      # Print status to stdout.
-      print('Epoch %d: loss = %.2f'
-             % (epoch, average_loss))
-      losses.append(average_loss)
-    return losses
+                # step_dev = step_dev + 1
+            print("-----------------------------------------------")
+            print("Test accuracy="+str(np.mean(accuracyList_dev)))
+            print("-----------------------------------------------")
+        if step % 300 == 0:
+            save_path = saver.save(session, model_path)
+            print("Model saved in file: %s" % save_path)
+    
+  def fit(self, sess,saver,model_path):
+    self.run_epoch(sess, self.train_op, saver,model_path,True)
 
   def __init__(self, config, sess):
     self.config = config
@@ -414,20 +289,32 @@ class RNNModel(LanguageModel):
     #self.cost = self.add_loss_op()
     self.train_op = self.add_training_op()
 
-def test_RNNModel():
+def test_RNNModel(startType='Restart'):
   """Train softmax model for a number of steps."""
   config = Config()
-  with tf.Graph().as_default():
-      sess = tf.Session()
-      initializer = tf.random_uniform_initializer(-0.1,0.1)
-      with tf.variable_scope("model", reuse=None, initializer=initializer):
-          model = RNNModel(config,sess)
-          
-      init = tf.initialize_all_variables()
-      sess.run(init)    
-      losses = model.fit(sess)
-      return losses
-
+  if startType == 'Restart':
+      with tf.Graph().as_default():
+          sess = tf.Session()
+          initializer = tf.random_uniform_initializer(-0.1,0.1)
+          with tf.variable_scope("model", reuse=None, initializer=initializer):
+              model = RNNModel(config,sess)
+          model_path = "RNNmodel.ckpt"
+          saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+          init = tf.initialize_all_variables()
+          sess.run(init)    
+          model.fit(sess,saver,model_path)
+  else:
+      with tf.Graph().as_default():
+          sess = tf.Session()
+          initializer = tf.random_uniform_initializer(-0.1,0.1)
+          with tf.variable_scope("model", reuse=None, initializer=initializer):
+              model = RNNModel(config,sess)
+          model_path = "RNNmodel.ckpt"
+          saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
+          #init = tf.initialize_all_variables()
+          #sess.run(init)
+          saver.restore(sess, model_path)
+          model.fit(sess,saver,model_path)
 
 if __name__ == "__main__":
-    losses = test_RNNModel()
+    losses = test_RNNModel('start')
