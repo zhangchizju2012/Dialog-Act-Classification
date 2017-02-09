@@ -95,7 +95,7 @@ class CNNModel(LanguageModel):
     for line in vocabulary_file:
         vocabulary.add(line.split('\n')[0])
 
-    vocab_processor = learn.preprocessing.VocabularyProcessor(self.max_document_length,vocabulary=vocabulary)
+    self.vocab_processor = vocab_processor = learn.preprocessing.VocabularyProcessor(self.max_document_length,vocabulary=vocabulary)
     self.x = np.array(list(vocab_processor.fit_transform(x_text)))
     self.vocabularySize = vocabulary.__len__()
     print(str(self.max_document_length))
@@ -301,6 +301,34 @@ class CNNModel(LanguageModel):
     print("-----------------------------------------------")
     print("Evaluate accuracy="+str(np.mean(accuracyList_dev)))
     print("-----------------------------------------------")
+  
+  def evaluateOneByOne(self, sess):
+    label = True
+    dictionary = {0:'Statement-opinion',
+                  1:'Statement-non-opinion',
+                  2:'Agree/Accept or Yes answers',
+                  3:'Appreciation',
+                  4:'Yes-No-Question',
+                  5:'Conventional-closing',
+                  6:'Wh-Question',
+                  7:'No answers'}
+    while label:
+        data = []
+        user_input = raw_input("Enter: ")
+        if user_input == 'qqq':
+            label = False
+        data.append(user_input)
+        x = np.array(list(self.vocab_processor.fit_transform(data)))
+        y = np.array([0,0,0,0,0,0,0,0]).reshape(1,8)
+    
+        fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+        feed_dict = self.create_feed_dict(x,y,1,real_len(x))
+        softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
+            # step_dev = step_dev + 1
+        print("prediction = "+dictionary[predictions_dev[0]])
+        print(predictions_dev[0])
+        print(scores_dev)
+        print("-----------------------------------------------")
 
 def test_CNNModel(startType='Restart'):
   """Train softmax model for a number of steps."""
@@ -372,8 +400,9 @@ def evaluateOneByOne_CNNModel():
         #init = tf.initialize_all_variables()
         #sess.run(init)
         saver.restore(sess, model_path)
-        model.evaluate(sess)
+        model.evaluateOneByOne(sess)
 
 if __name__ == "__main__":
     #test_CNNModel('start')
-    evaluate_CNNModel()
+    #evaluate_CNNModel()
+    evaluateOneByOne_CNNModel()
