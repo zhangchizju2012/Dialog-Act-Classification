@@ -199,7 +199,7 @@ class CNNModel(LanguageModel):
 
       with tf.name_scope('loss'):
 		losses = tf.nn.softmax_cross_entropy_with_logits(self.scores, self.labels_placeholder) 
-		self.loss = tf.reduce_mean(losses) + 0 * l2_loss
+		self.loss = tf.reduce_mean(losses) + 0.1 * l2_loss
 
       with tf.name_scope('accuracy'):
 		correct_predictions = tf.equal(self.predictions, tf.argmax(self.labels_placeholder, 1))
@@ -367,7 +367,7 @@ def test_CNNModel(startType='Restart'):
           sess.run(init)    
           model.fit(sess,saver,checkpoint_prefix)
           '''
-          model_path = "model.ckpt"
+          model_path = "CNNmodel.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           init = tf.initialize_all_variables()
           sess.run(init)    
@@ -414,7 +414,7 @@ def evaluateOneByOne_CNNModel():
         saver.restore(sess, model_path)
         model.evaluateOneByOne(sess)
 
-#if __name__ == "__main__":
-    #test_CNNModel('start')
-probablityList_dev_CNN, targetList_dev_CNN, predictionList_dev_CNN, scoresList_dev_CNN = evaluate_CNNModel()
+if __name__ == "__main__":
+    test_CNNModel('Restart')
+    #probablityList_dev_CNN, targetList_dev_CNN, predictionList_dev_CNN, scoresList_dev_CNN = evaluate_CNNModel()
     #evaluateOneByOne_CNNModel()
