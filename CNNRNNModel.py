@@ -196,7 +196,7 @@ class CNNModel(LanguageModel):
               ind = tf.to_float(ind)
               ind = tf.expand_dims(ind, -1)
               mat = tf.matmul(ind, one)
-              output = tf.add(tf.mul(output, mat),tf.mul(outputs[i], 1.0 - mat))#batch_size * hidden_unit
+              self.output = output = tf.add(tf.mul(output, mat),tf.mul(outputs[i], 1.0 - mat))#batch_size * hidden_unit
             #only leave the last one
          
       l2_loss = tf.constant(0.0)
@@ -206,7 +206,7 @@ class CNNModel(LanguageModel):
             l2_loss += tf.nn.l2_loss(self.W)
             l2_loss += tf.nn.l2_loss(self.b)
             self.l2_loss = l2_loss
-            self.scores = tf.nn.xw_plus_b(self.h_drop, self.W, self.b, name="scores")
+            self.scores = tf.nn.xw_plus_b(output, self.W, self.b, name="scores")
             self.predictions = tf.argmax(self.scores, 1, name="predictions")
             self.probablity = tf.nn.softmax(self.scores)
             self.target = tf.argmax(self.labels_placeholder, 1)
@@ -247,7 +247,7 @@ class CNNModel(LanguageModel):
     accuracyList = []
     for batch in batches:
         x, y = zip(*batch)
-        fetches = [self.b,self.inputs,self.loss,self.l2_loss, self.accuracy,self.predictions, self.scores,self.h_drop,eval_op]
+        fetches = [self.b,self.inputs,self.loss,self.l2_loss, self.accuracy,self.predictions, self.scores,self.output,eval_op]
         feed_dict = self.create_feed_dict(x,y,0.5,real_len(x))
         softmax_b,inputs,cost,l2_cost, accuracy,predictions, scores,out,_ = session.run(fetches, feed_dict)
         accuracyList.append(accuracy)
@@ -271,7 +271,7 @@ class CNNModel(LanguageModel):
             accuracyList_dev = []
             for batch_dev in batches_dev:
                 x_dev, y_dev = zip(*batch_dev)
-                fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+                fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
                 feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
                 softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = session.run(fetches, feed_dict)
                 accuracyList_dev.append(accuracy_dev)
@@ -312,7 +312,7 @@ class CNNModel(LanguageModel):
     scoresList_dev = []
     for batch_dev in batches_dev:
         x_dev, y_dev = zip(*batch_dev)
-        fetches = [self.target,self.probablity,self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+        fetches = [self.target,self.probablity,self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
         feed_dict = self.create_feed_dict(x_dev,y_dev,1,real_len(x_dev))
         target_dev,probablity_dev,softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
         accuracyList_dev.append(accuracy_dev)
@@ -346,7 +346,7 @@ class CNNModel(LanguageModel):
         x = np.array(list(self.vocab_processor.fit_transform(data)))
         y = np.array([0,0,0,0,0,0,0,0]).reshape(1,8)
     
-        fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.h_drop]
+        fetches = [self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
         feed_dict = self.create_feed_dict(x,y,1,real_len(x))
         softmax_b_dev,inputs_dev,cost_dev, accuracy_dev,predictions_dev, scores_dev,out_dev = sess.run(fetches, feed_dict)
             # step_dev = step_dev + 1
@@ -364,24 +364,7 @@ def test_CNNModel(startType='Restart'):
           initializer = tf.random_uniform_initializer(-0.1,0.1)
           with tf.variable_scope("model", reuse=None, initializer=initializer):
               model = CNNModel(config,sess)
-          '''
-          # Output directory for models and summaries
-          timestamp = str(int(time.time()))
-          out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
-          print("Writing to {}\n".format(out_dir))
-          
-          # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
-          checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
-          checkpoint_prefix = os.path.join(checkpoint_dir, "model")
-          if not os.path.exists(checkpoint_dir):
-              os.makedirs(checkpoint_dir)
-          saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
-          
-          init = tf.initialize_all_variables()
-          sess.run(init)    
-          model.fit(sess,saver,checkpoint_prefix)
-          '''
-          model_path = "CNNmodel.ckpt"
+          model_path = "CNNRNNmodel.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           init = tf.initialize_all_variables()
           sess.run(init)    
@@ -392,7 +375,7 @@ def test_CNNModel(startType='Restart'):
           initializer = tf.random_uniform_initializer(-0.1,0.1)
           with tf.variable_scope("model", reuse=None, initializer=initializer):
               model = CNNModel(config,sess)
-          model_path = "CNNmodel.ckpt"
+          model_path = "CNNRNNmodel.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           #init = tf.initialize_all_variables()
           #sess.run(init)
