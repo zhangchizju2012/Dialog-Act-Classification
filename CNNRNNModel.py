@@ -363,6 +363,7 @@ class CNNModel(LanguageModel):
     targetList_dev = []
     predictionList_dev = []
     scoresList_dev = []
+    print("-----------------------------------------------")
     for batch_dev in batches_dev:
         x_dev, y_dev = zip(*batch_dev)
         fetches = [self.target,self.probablity,self.b,self.inputs,self.loss, self.accuracy,self.predictions, self.scores,self.output]
@@ -375,7 +376,6 @@ class CNNModel(LanguageModel):
         targetList_dev.append(target_dev)
         predictionList_dev.append(predictions_dev)
         scoresList_dev.append(scores_dev)
-    print("-----------------------------------------------")
     print("Evaluate accuracy="+str(np.mean(accuracyList_dev)))
     print("-----------------------------------------------")
     return probablityList_dev, targetList_dev, predictionList_dev, scoresList_dev
@@ -465,6 +465,6 @@ def evaluateOneByOne_CNNModel():
         model.evaluateOneByOne(sess)
 
 if __name__ == "__main__":
-    test_CNNModel('Restart')
-    #probablityList_dev_CNN, targetList_dev_CNN, predictionList_dev_CNN, scoresList_dev_CNN = evaluate_CNNModel()
+    #test_CNNModel('start')
+    probablityList_dev_CNN, targetList_dev_CNN, predictionList_dev_CNN, scoresList_dev_CNN = evaluate_CNNModel()
     #evaluateOneByOne_CNNModel()
