@@ -67,24 +67,15 @@ class EvaConfig(object):
 
 class CNNModel(LanguageModel):
   """Implements a Softmax classifier with cross-entropy loss."""
+  '''
   def load_data(self):
     fin = open('result.txt','r')
-    dictionary = {'sd':[0,1,0,0,0,0,0,0],'sv':[1,0,0,0,0,0,0,0],'aa':[0,0,1,0,0,0,0,0],'ny':[0,0,1,0,0,0,0,0],'ba':[0,0,0,1,0,0,0,0],'qy':[0,0,0,0,1,0,0,0],'qy^d':[0,0,0,0,1,0,0,0],'fc':[0,0,0,0,0,1,0,0],'qw':[0,0,0,0,0,0,1,0],'nn':[0,0,0,0,0,0,0,1]}
+    dictionary = {'sd':[1,0,0,0,0,0,0,0],'sv':[0,1,0,0,0,0,0,0],'aa':[0,0,1,0,0,0,0,0],'ny':[0,0,1,0,0,0,0,0],'ba':[0,0,0,1,0,0,0,0],'qy':[0,0,0,0,1,0,0,0],'qy^d':[0,0,0,0,1,0,0,0],'fc':[0,0,0,0,0,1,0,0],'qw':[0,0,0,0,0,0,1,0],'nn':[0,0,0,0,0,0,0,1]}
     x_text = []
     y = []
-    count = {'sd':0,'sv':0,'aa':0}
     for line in fin:
-        if line.split(':')[0] == 'ny':
-            pass
-        elif line.split(':')[0] in count and count[line.split(':')[0]] > 4000:
-            pass
-        elif line.split(':')[0] in count and count[line.split(':')[0]] <= 4000:
-            x_text.append(line.split(':')[1].split('\n')[0].lower())
-            y.append(dictionary[line.split(':')[0]])
-            count[line.split(':')[0]] = count[line.split(':')[0]] + 1
-        else:
-            x_text.append(line.split(':')[1].split('\n')[0].lower())
-            y.append(dictionary[line.split(':')[0]])
+        x_text.append(line.split(':')[1].split('\n')[0].lower())
+        y.append(dictionary[line.split(':')[0]])
     self.y = np.array(y)
     del y
     self.max_document_length = max([len(x.split(" ")) for x in x_text])
@@ -94,11 +85,72 @@ class CNNModel(LanguageModel):
     for line in vocabulary_file:
         vocabulary.add(line.split('\n')[0])
 
-    self.vocab_processor = vocab_processor = learn.preprocessing.VocabularyProcessor(self.max_document_length,vocabulary=vocabulary)
+    vocab_processor = learn.preprocessing.VocabularyProcessor(self.max_document_length,vocabulary=vocabulary)
     self.x = np.array(list(vocab_processor.fit_transform(x_text)))
     self.vocabularySize = vocabulary.__len__()
     print(str(self.max_document_length))
     del x_text
+    
+    # Randomly shuffle data
+    np.random.seed(10)
+    shuffle_indices = np.random.permutation(np.arange(len(self.y)))
+    x_shuffled = self.x[shuffle_indices]
+    y_shuffled = self.y[shuffle_indices]
+    del self.x, self.y, shuffle_indices
+    
+    dev_sample_index = -1 * int(0.1 * float(len(y_shuffled)))
+    self.x_train, self.x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
+    self.y_train, self.y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
+    del x_shuffled, y_shuffled
+    
+    print("Vocabulary Size: {:d}".format(self.vocabularySize))
+    print("Train/Dev split: {:d}/{:d}".format(len(self.y_train), len(self.y_dev)))
+    print("Load Data Finished")
+    '''
+  def load_data(self):
+    fin = open('result.txt','r')
+    dictionary = {'sd':[0,1,0,0,0,0,0,0],'sv':[1,0,0,0,0,0,0,0],'aa':[0,0,1,0,0,0,0,0],'ny':[0,0,1,0,0,0,0,0],'ba':[0,0,0,1,0,0,0,0],'qy':[0,0,0,0,1,0,0,0],'qy^d':[0,0,0,0,1,0,0,0],'fc':[0,0,0,0,0,1,0,0],'qw':[0,0,0,0,0,0,1,0],'nn':[0,0,0,0,0,0,0,1]}
+    x_text = []
+    y = []
+    x_test = []
+    y_test = []
+    x_all = []
+    count = {'sd':0,'sv':0,'aa':0}
+    for line in fin:
+        if line.split(':')[0] == 'ny':
+            pass
+        elif line.split(':')[0] in count and count[line.split(':')[0]] > 4000:
+            x_test.append(line.split(':')[1].split('\n')[0].lower())
+            y_test.append(dictionary[line.split(':')[0]])
+        elif line.split(':')[0] in count and count[line.split(':')[0]] <= 4000:
+            x_text.append(line.split(':')[1].split('\n')[0].lower())
+            y.append(dictionary[line.split(':')[0]])
+            count[line.split(':')[0]] = count[line.split(':')[0]] + 1
+        else:
+            x_text.append(line.split(':')[1].split('\n')[0].lower())
+            y.append(dictionary[line.split(':')[0]])
+        x_all.append(line.split(':')[1].split('\n')[0].lower())
+    self.y = np.array(y)
+    del y
+    self.y_test = np.array(y_test)
+    del y_test
+    self.max_document_length = max([len(x.split(" ")) for x in x_all])
+
+    vocabulary = learn.preprocessing.CategoricalVocabulary()
+    vocabulary_file = open('/Users/zhangchi/Desktop/cs690/glove/vocabulary.txt','r')
+    for line in vocabulary_file:
+        vocabulary.add(line.split('\n')[0])
+
+    self.vocab_processor = vocab_processor = learn.preprocessing.VocabularyProcessor(self.max_document_length,vocabulary=vocabulary)
+    self.x_all = np.array(list(vocab_processor.fit_transform(x_all)))
+    self.x = np.array(list(vocab_processor.fit_transform(x_text)))
+    self.x_test = np.array(list(vocab_processor.fit_transform(x_test)))
+    self.vocabularySize = vocabulary.__len__()
+    print(str(self.max_document_length))
+    del x_text
+    del x_test
+    del x_all
+    del self.x_all
     
     # Randomly shuffle data
     np.random.seed(15)
@@ -115,7 +167,7 @@ class CNNModel(LanguageModel):
     print("Vocabulary Size: {:d}".format(self.vocabularySize))
     print("Train/Dev split: {:d}/{:d}".format(len(self.y_train), len(self.y_dev)))
     print("Load Data Finished")
-
+    
   def add_placeholders(self):
     self.input_placeholder = tf.placeholder(tf.int32, shape=(self.config.batch_size, self.max_document_length))
     self.labels_placeholder = tf.placeholder(tf.int32, shape=(self.config.batch_size, 8))
@@ -302,7 +354,8 @@ class CNNModel(LanguageModel):
     #self.cost = self.add_loss_op()
     self.train_op = self.add_training_op()
   def evaluate(self, sess):
-    batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 1)
+    batches_dev = batch_iter(list(zip(self.x_test, self.y_test)), self.config.batch_size, 1)
+    #batches_dev = batch_iter(list(zip(self.x_dev, self.y_dev)), self.config.batch_size, 1)
     costs_dev = 0.0
     # step_dev = 0
     accuracyList_dev = []
