@@ -70,12 +70,13 @@ class CNNModel(LanguageModel):
   """Implements a Softmax classifier with cross-entropy loss."""
   def load_data(self):
     fin = open('result.txt','r')
-    dictionary = {'sd':[0,1,0,0,0,0,0,0],'sv':[1,0,0,0,0,0,0,0],'aa':[0,0,1,0,0,0,0,0],'ny':[0,0,1,0,0,0,0,0],'ba':[0,0,0,1,0,0,0,0],'qy':[0,0,0,0,1,0,0,0],'qy^d':[0,0,0,0,1,0,0,0],'fc':[0,0,0,0,0,1,0,0],'qw':[0,0,0,0,0,0,1,0],'nn':[0,0,0,0,0,0,0,1]}
+    dictionary = {'sd':[0,1,0,0,0,0,0,0],'sv':[1,0,0,0,0,0,0,0],'aa':[0,0,1,0,0,0,0,0],'ny':[0,0,1,0,0,0,0,0],'ba':[0,0,0,1,0,0,0,0],'qy':[0,0,0,0,1,0,0,0],'qy^d':[0,0,0,0,1,0,0,0],'fc':[0,0,0,0,0,1,0,0],'qw':[0,0,0,0,0,0,1,0],'nn':[0,0,0,0,0,0,0,1],'ar':[0,0,0,0,0,0,0,1]}
     x_text = []
     y = []
     count = {'sd':0,'sv':0,'aa':0}
     for line in fin:
-        if line.split(':')[0] == 'ny':
+        #if line.split(':')[0] == 'ny':
+        if line.split(':')[0] == 'ny' or line.split(':')[0] == 'ba':#for 7 label version
             pass
         elif line.split(':')[0] in count and count[line.split(':')[0]] > 4000:
             pass
@@ -367,7 +368,7 @@ def test_CNNModel(startType='Restart'):
           sess.run(init)    
           model.fit(sess,saver,checkpoint_prefix)
           '''
-          model_path = "CNNmodel.ckpt"
+          model_path = "CNNmodel2.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           init = tf.initialize_all_variables()
           sess.run(init)    
@@ -378,7 +379,7 @@ def test_CNNModel(startType='Restart'):
           initializer = tf.random_uniform_initializer(-0.1,0.1)
           with tf.variable_scope("model", reuse=None, initializer=initializer):
               model = CNNModel(config,sess)
-          model_path = "CNNmodel.ckpt"
+          model_path = "CNNmodel2.ckpt"
           saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
           #init = tf.initialize_all_variables()
           #sess.run(init)
@@ -392,7 +393,7 @@ def evaluate_CNNModel():
         initializer = tf.random_uniform_initializer(-0.1,0.1)
         with tf.variable_scope("model", reuse=None, initializer=initializer):
             model = CNNModel(config,sess)
-        model_path = "CNNmodel.ckpt"
+        model_path = "CNNmodel2.ckpt"
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
         #init = tf.initialize_all_variables()
         #sess.run(init)
@@ -407,7 +408,7 @@ def evaluateOneByOne_CNNModel():
         initializer = tf.random_uniform_initializer(-0.1,0.1)
         with tf.variable_scope("model", reuse=None, initializer=initializer):
             model = CNNModel(config,sess)
-        model_path = "CNNmodel.ckpt"
+        model_path = "CNNmodel2.ckpt"
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=3)
         #init = tf.initialize_all_variables()
         #sess.run(init)
